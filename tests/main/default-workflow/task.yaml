@@ -1,0 +1,23 @@
+summary: Prove an obligation with the default backend workflow
+
+prepare: |
+  envsubst '${BASE}' <workshop.yaml.in >workshop.yaml
+  workshop launch
+
+execute: |
+  # No explicit backend: tlapm tries SMT (Z3), then Zenon, then Isabelle.
+  workshop exec -- tee DefaultTest.tla >/dev/null <<'TLA'
+  ---- MODULE DefaultTest ----
+  EXTENDS TLAPS
+  THEOREM t == TRUE OBVIOUS
+  ====
+  TLA
+  workshop exec -- tlapm --cleanfp --strict DefaultTest.tla >default.log 2>&1
+  grep -qE 'All [0-9]+ obligations? proved' default.log
+
+debug: |
+  workshop tasks
+  cat default.log || true
+
+restore: |
+  workshop remove || true

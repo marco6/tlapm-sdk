@@ -1,2 +1,6 @@
 # sdkcraft build artifacts
 *.sdk
+
+# Local Workshop environment state
+.workshop/
+.workshop.lock

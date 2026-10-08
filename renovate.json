@@ -3,6 +3,7 @@
   "extends": [
     "config:recommended"
   ],
+  "dependencyDashboard": true,
   "enabledManagers": [
     "custom.regex"
   ],
@@ -10,22 +11,21 @@
     {
       "customType": "regex",
       "managerFilePatterns": ["/^VERSION$/"],
-      "matchStrings": [
-        "(?<currentValue>[0-9.]+)"
-      ],
-      "depNameTemplate": "TODO_DEP_NAME",
-      "datasourceTemplate": "TODO_DATASOURCE",
-      "versioningTemplate": "semver"
+      "matchStrings": ["(?m)^(?<currentDigest>[0-9a-f]{40})$"],
+      "currentValueTemplate": "isa-plain-reloc",
+      "depNameTemplate": "tlapm-source",
+      "packageNameTemplate": "https://github.com/tlaplus/tlapm",
+      "datasourceTemplate": "git-refs"
     }
   ],
+  "automerge": false,
   "baseBranchPatterns": [
-    "TODO_BRANCH"
+    "1.6"
   ],
   "packageRules": [
     {
-      "matchPackageNames": ["TODO_DEP_NAME"],
-      "matchBaseBranches": ["TODO_BRANCH"],
-      "allowedVersions": "/^TODO_VERSION_PREFIX\\./"
+      "description": "tlapm-source tracks the pinned upstream commit on VERSION line 2. Pin bumps must pass CI: the SDK build compiles TLAPM and runs upstream's relocated-release Isabelle proof check. Move the upstream series on VERSION line 1 in the same PR. After https://github.com/tlaplus/tlapm/pull/297 merges, change currentValueTemplate to main.",
+      "matchPackageNames": ["tlapm-source"]
     }
   ]
 }

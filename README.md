@@ -1,97 +1,9 @@
-<!--
-# SDK README Template for Workshop
+# TLAPM SDK for Workshop
 
-OVERALL DESIGN (for sdkcraft.yaml description field):
-
-The sdkcraft.yaml `description` field should match the README overview
-paragraph so it can be reused in `sdk info` output. Write it as a short YAML
-multiline string — no sub-headings, no bullet lists. Follow this pattern:
-
-description: |
-  This SDK provides [toolchain/runtime] for [purpose].
-  [Key resources] are persisted on the host to speed up [builds/installs]
-  across workshop updates.
-
-Examples from approved SDKs:
-
-  # go
-  description: |
-    This SDK provides the official Go toolchain for efficient Go
-    development. Module downloads are persisted on the host to speed up builds
-    across workshop updates, and Go environment settings are preserved between
-    workshop updates.
-
-  # node
-  description: |
-    This SDK provides a complete Node.js development environment built from
-    source, with Corepack enabled for flexible package manager choice. Package
-    manager caches are persisted on the host to speed up dependency
-    installations across workshop updates.
-
-README TEMPLATE INSTRUCTIONS:
-
-1. Copy this file to your SDK repository directory as README.md
-2. Replace all placeholders in [SQUARE BRACKETS] with your actual content;
-   replace XYZ, FOO, BAR with real product names
-3. Remove any sections that don't apply to your SDK for simplicity
-4. Delete this comment block before publishing
-5. Test all command examples before publishing
-
-Focus on the SDK's behavior, not the target library/framework documentation.
-Link to upstream docs for product-related specifics.
-
-Do NOT include "Installed components" or "Platforms, channels, versions"
-sections. Component details should be folded into the overview paragraph.
-Channel information belongs in `sdk info`, not the README.
-
-SECTION GUIDE:
-
-Title and description:
-Use the format "[Software Name] SDK for Workshop". Answer: What is it?
-What does it do? Who is it for? Keep it 2-3 compound sentences long.
-Focus on how the SDK affects the user's environment, not on marketing
-language. Avoid phrases like "focus on writing and testing code".
-
-Reference workshop:
-Provide an inline minimal workshop.yaml.
-Explain briefly what the reference demonstrates.
-
-Using the SDK:
-Step-by-step: prerequisite SDKs, project layout, launch, primary workflow.
-All commands must be tested and working. Keep code examples clear about
-whether they run on the host or inside the workshop.
-
-Plugs and slots:
-Document each plug: interface, target/source, purpose.
-Include mounts and persistence details here, and document any tunnels
-alongside other plug types.
-If the SDK relies on resources exposed by other SDKs, say this explicitly.
-Do the same for slots if SDK exposes resources to others.
-Use "workshop updates" (not "restarts" or "sessions") when describing
-what mounts survive.
-
-Documentation and guidance:
-Link to upstream docs.
-
-Community and support:
-Link to forums, support channels, Code of Conduct.
-
-Contributions:
-Link to contribution guides, CONTRIBUTING.md.
-
-License and copyright:
-Include copyright holder, year, license name and link.
-Make sure to include all shipped components.
--->
-
-# [Software Name] SDK for Workshop
-
-[Brief description of what this SDK provides. Should closely match the
-sdkcraft.yaml description. Focus on how the SDK affects the development
-environment: what toolchain/runtime it provides, what it persists on the host,
-and any notable features. Example: "A development environment for Go projects.
-It provides the official Go toolchain, manages module caches via persistent
-mounts, and preserves Go environment settings across workshop updates."]
+A proof-checking environment for TLA+ specifications. It provides the TLA+
+Proof Manager (`tlapm`), with the Zenon and Isabelle/TLA+ proof backends
+packaged alongside and the Z3 SMT so the default proof workflow (SMT, then
+Zenon, then Isabelle) works with no manual setup.
 
 ---
 
@@ -101,19 +13,18 @@ A minimal workshop:
 
 ```yaml
 # workshop.yaml
-name: [workshop-name]
-base: ubuntu@[version]  # e.g., ubuntu@24.04
+name: proof-demo
+base: ubuntu@24.04
 sdks:
-  - name: [sdk-name]
-    channel: [channel]  # e.g., 1.24/stable
+  - name: tlapm
+    channel: latest/edge
 
 actions:
-  [action-name]: |
-    [command]
+  prove: tlapm --cleanfp --strict Proof.tla
 ```
 
-[One sentence explaining what this demonstrates, e.g., "This demonstrates a
-basic Go build workflow with persistent module caching."]
+This demonstrates checking a TLA+ proof with the SDK's default backend
+workflow.
 
 ---
 
@@ -121,81 +32,103 @@ basic Go build workflow with persistent module caching."]
 
 ### Prerequisites, project layout
 
-1. [List prerequisites, e.g., "This relies on the `uv` SDK for venv."]
-2. [Suggest expected project directory structure, including source code layout
-   and setup steps needed:]
+1. No prerequisite SDKs are required.
+2. Put your TLA+ modules (`.tla` files) in your project directory. To try the
+   SDK without an existing spec, create `Proof.tla`:
 
-   ```bash
-   [command to clone or prepare sources]
+   ```tla
+   ---- MODULE Proof ----
+   EXTENDS TLAPS, Naturals
+   THEOREM t == \A x \in Nat : x + 0 = x
+     OBVIOUS
+   ====
    ```
 
-3. [Describe what side effects may happen during launch and refresh.]
+3. On launch and on every workshop refresh, the SDK installs `z3` from the
+   Ubuntu archive and puts its own `bin/` directory on `PATH` system-wide.
 
-### [Primary workflow task, e.g., "Build the project"]
+### Check proofs
 
 Once the workshop is ready:
 
 ```bash
-[workshop run]
-[commands to perform the primary task]
-```
-
-[Explain where outputs go and how they persist across workshop updates.]
-
-### [Secondary workflow task, e.g., "Test and run"]
-
-From within the workshop shell:
-
-```bash
 workshop shell
-[test or run commands]
+tlapm --cleanfp --strict Proof.tla
 ```
 
-[Brief explanation of what this achieves.]
+A successful run ends with `All N obligations proved`. Proof fingerprints
+(`.tlacache`) are written next to your sources under `/project` and survive
+as part of your project files.
+
+### Selecting a proof backend
+
+TLAPS tries backends in the order SMT (Z3), Zenon, and Isabelle by default.
+You can also name a backend explicitly in a `BY` clause:
+
+```tla
+THEOREM t == 2 + 2 = 4 BY Z3      \* SMT solver (Ubuntu's z3)
+THEOREM t == TRUE /\ TRUE BY Zenon \* first-order tableau prover
+THEOREM t == TRUE /\ TRUE BY Isa  \* Isabelle/TLA+ (tactic `auto`)
+```
+
+Timeouts can be tuned with `BY Z3T(60)`, `BY ZenonT(30)`, `BY IsaT(60)`,
+and Isabelle tactics with `BY IsaM("blast")`. `tlapm --config` lists the
+backends found in the workshop; `tlapm --help` documents all options.
+
+The LS4 backend for propositional temporal logic (`BY PTL`) is also packaged.
+Optional solvers that TLAPM knows about but this SDK does not ship (CVC4,
+Yices, VeriT, SPASS, Zipperposition) report as missing, which is expected.
 
 ---
 
 ## Plugs (resources this SDK consumes)
 
-### `[plug-name]`
-
-- Interface: `mount`
-- Workshop target: `[/path/inside/workshop]`
-- Purpose: [What this persists between workshop updates.]
-
-### `[plug-name]`
-
-- Interface: `gpu`
-- Purpose: Grants access to [AMD/NVIDIA] GPU hardware on the host.
-
--- OR --
-
 This SDK doesn't define any plugs.
 
 ## Slots (resources this SDK provides)
-
-### `[slot-name]`
-
-- Interface: `mount`
-- Workshop source: `[/path/inside/workshop]`
-- Purpose: [What resource this exposes to other SDKs]
-
--- OR --
 
 This SDK doesn't define any slots.
 
 ---
 
+## Dependency provenance
+
+The SDK builds TLAPM from the maintained upstream source, pinned in the
+`VERSION` file (currently the `1.6.0-pre` rolling prerelease line, commit
+`85b548a`, which includes the reduced-Isabelle packaging of
+[tlapm#292](https://github.com/tlaplus/tlapm/pull/292) and the heap
+relocation fix of [tlapm#297](https://github.com/tlaplus/tlapm/pull/297)).
+
+| Component | Source | Notes |
+| --- | --- | --- |
+| `tlapm` | `tlaplus/tlapm` source at the pinned commit | Built during the SDK build with Ubuntu's OCaml 4.14 |
+| OCaml toolchain | Ubuntu 24.04 archive (`ocaml`, `opam`) | `opam` resolves TLAPM's OCaml library dependencies at build time from the opam repository; these are not version-locked |
+| Dune | opam repository | Ubuntu 24.04 ships 3.14; TLAPM requires >= 3.15, so Dune comes from opam |
+| Z3 | Ubuntu 24.04 archive (`z3` 4.8.12) | Installed at runtime by the `setup-base` hook. Upstream's build otherwise downloads a prebuilt Z3 binary from a GitHub release; that rule is removed in this SDK |
+| Zenon | Vendored in the TLAPM source tree | Built during the SDK build |
+| Isabelle/TLA+ | Official [Isabelle2025](https://isabelle.in.tum.de/website-Isabelle2025/) archive (SHA-256 pinned by upstream), plus the TLA+ object logic from the TLAPM source | Build-time only. The heaps (`Pure`, `TLA+`, `Options`) and a minimal Poly/ML runtime are built into the SDK; the JVM and the rest of the Isabelle distribution are neither shipped nor needed at runtime |
+| LS4 (`BY PTL`) | `quickbeam123/ls4` v1.0 source, patched by upstream | Built from source during the SDK build |
+
+Exceptions to the "Ubuntu archive first" rule are the Isabelle2025
+distribution, the opam-resolved OCaml libraries, and the LS4 source archive;
+each is listed above with its origin. The SDK deliberately does not use any
+GitHub-hosted binary release tarball.
+
+---
+
 ## Documentation and guidance
 
-- [[XYZ] official documentation]([upstream-docs-url])
-- [[XYZ] best practices]([public-website-url])
+- [TLA+ Proof System documentation](https://proofs.tlapl.us/)
+- [TLAPS tutorial](https://proofs.tlapl.us/doc/web/content/Documentation/Tutorial.html)
+- [Backend tactics reference](https://proofs.tlapl.us/doc/web/content/Documentation/Tutorial/Tactics.html)
+- [TLAPM sources](https://github.com/tlaplus/tlapm)
 
 ---
 
 ## Community and support
 
-- [XYZ] community forum: [Link to upstream forum/community]
+- TLA+ community: [TLA+ Google Group](https://groups.google.com/g/tlaplus)
+- Workshop forum: [Discourse](https://discourse.ubuntu.com/)
 - Please review our [Code of Conduct](https://ubuntu.com/community/ethos/code-of-conduct)
   before participating.
 
@@ -206,13 +139,23 @@ This SDK doesn't define any slots.
 All contributions, including code, documentation updates, and issue reports,
 are welcome!
 
-- See [CONTRIBUTING]([public-github-url]) for guidelines.
-- Open issues or pull requests on the [official repository]([repo-url]).
+- See [CONTRIBUTING](https://github.com/tlaplus/tlapm/blob/main/CONTRIBUTING.md)
+  for guidelines on changes to the packaged software.
+- Open issues or pull requests on the
+  [official repository](https://github.com/marco6/tlapm-sdk).
 
 ---
 
 ## License and copyright
 
-Copyright [START YEAR] [COPYRIGHT HOLDER].
+Copyright 2026 the TLAPM SDK authors.
 
-[Include any required claims, information, and disclaimers for your license.]
+The SDK packages the following components, each under its own license:
+
+- TLAPM (main codebase): BSD-2-Clause — © 2008 INRIA & Microsoft Corporation,
+  © 2023 Linux Foundation
+- Zenon: BSD-style license — © 1997-2006 INRIA
+- Isabelle2025: BSD-3-Clause — Technische Universität München
+- Poly/ML 5.9 and the TLAPM `translate` directory (installed as
+  `ptl_to_trp`): LGPL-2.1
+- Z3: MIT — provided by the Ubuntu `z3` package at runtime, not shipped

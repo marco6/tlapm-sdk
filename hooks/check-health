@@ -1,0 +1,30 @@
+# Healthy == the workshop user can run tlapm and all three required proof
+# backends (Z3 from Ubuntu, Zenon, Isabelle/TLA+ shipped with the SDK)
+# resolve. tlapm --config probes every backend and prints a
+# `Name == "command"` line for each one it finds, so we check for the three
+# we ship. Optional solvers upstream knows about (CVC4, Yices, ...) are
+# expected to be missing and are not checked.
+
+if ! sudo -u workshop --login tlapm --version >/dev/null 2>&1; then
+  workshopctl set-health error 'tlapm not found on PATH for the workshop user'
+  exit 1
+fi
+
+if ! sudo -u workshop --login z3 -version >/dev/null 2>&1; then
+  workshopctl set-health error 'z3 not found on PATH for the workshop user'
+  exit 1
+fi
+
+if ! config=$(sudo -u workshop --login tlapm --config 2>&1); then
+  workshopctl set-health error "tlapm --config failed: $config"
+  exit 1
+fi
+
+for backend in 'Isabelle ==' 'zenon ==' 'Z3 =='; do
+  if ! grep -qF "$backend" <<<"$config"; then
+    workshopctl set-health error "tlapm --config is missing the $backend backend: $config"
+    exit 1
+  fi
+done
+
+workshopctl set-health okay

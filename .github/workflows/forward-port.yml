@@ -1,9 +1,15 @@
+# DORMANT: forward-porting requires push access to main and the
+# LONG_TERM_BRANCHES repository variable, neither of which is available
+# yet. To re-enable, restore the commented-out trigger below and set
+# LONG_TERM_BRANCHES (e.g. to "1.6").
+
 name: Forward-Port from Main
 
 on:
-  push:
-    branches:
-      - main
+  # push:
+  #   branches:
+  #     - main
+  workflow_dispatch:
 
 permissions:
   contents: write

@@ -1,0 +1,22 @@
+summary: Prove an obligation with the Zenon backend
+
+prepare: |
+  envsubst '${BASE}' <workshop.yaml.in >workshop.yaml
+  workshop launch
+
+execute: |
+  workshop exec -- tee ZenonTest.tla >/dev/null <<'TLA'
+  ---- MODULE ZenonTest ----
+  EXTENDS TLAPS
+  THEOREM t == TRUE /\ TRUE BY ZenonT (5)
+  ====
+  TLA
+  workshop exec -- tlapm --cleanfp --strict ZenonTest.tla >zenon.log 2>&1
+  grep -qE 'All [0-9]+ obligations? proved' zenon.log
+
+debug: |
+  workshop tasks
+  cat zenon.log || true
+
+restore: |
+  workshop remove || true

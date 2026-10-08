@@ -1,0 +1,36 @@
+summary: Prove an obligation with the Isabelle backend and reject a false one
+
+prepare: |
+  envsubst '${BASE}' <workshop.yaml.in >workshop.yaml
+  workshop launch
+
+execute: |
+  workshop exec -- tee IsaTest.tla >/dev/null <<'TLA'
+  ---- MODULE IsaTest ----
+  EXTENDS TLAPS
+  THEOREM t == TRUE /\ TRUE BY Isa
+  ====
+  TLA
+  workshop exec -- tlapm --cleanfp --strict IsaTest.tla >isa.log 2>&1
+  grep -qE 'All [0-9]+ obligations? proved' isa.log
+
+  # A false theorem must fail: this catches a broken backend that reports
+  # success for anything (e.g. heaps that silently fail to load).
+  workshop exec -- tee IsaFalse.tla >/dev/null <<'TLA'
+  ---- MODULE IsaFalse ----
+  EXTENDS TLAPS
+  THEOREM t == 1 = 2 BY Isa
+  ====
+  TLA
+  if workshop exec -- tlapm --cleanfp --strict IsaFalse.tla >isafalse.log 2>&1; then
+    echo 'FATAL: tlapm reported success for a false theorem' >&2
+    exit 1
+  fi
+  grep -qE '[0-9]+ obligations? failed' isafalse.log
+
+debug: |
+  workshop tasks
+  cat isa.log isafalse.log || true
+
+restore: |
+  workshop remove || true
