@@ -1,8 +1,12 @@
+# DORMANT: scheduled Renovate runs open PRs against the remote version
+# branch, which is not possible without push access. To re-enable, restore
+# the commented-out schedule below.
+
 name: Renovate
 
 on:
-  schedule:
-    - cron: "0 4 * * 1-5"
+  # schedule:
+  #   - cron: "0 4 * * 1-5"
   workflow_dispatch:
 
 permissions:

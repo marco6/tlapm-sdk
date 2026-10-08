@@ -1,0 +1,119 @@
+name: tlapm
+adopt-info: tlapm
+title: TLAPM
+summary: TLA+ Proof Manager for checking TLA+ proofs
+description: |
+  This SDK provides the TLA+ Proof Manager (TLAPM), built from source, for
+  mechanically checking TLA+ (TLAPS) proofs. 
+  It includes the Zenon and Isabelle/TLA+ proof backends, as well as support for the Z3 SMT solver.
+license: BSD-2-Clause AND BSD-3-Clause AND LGPL-2.1-or-later
+website: https://proofs.tlapl.us/
+source-code: https://github.com/marco6/tlapm-sdk
+issues: https://github.com/marco6/tlapm-sdk/issues
+base: ubuntu@24.04
+build-base: ubuntu@24.04
+
+# The only supported platform. The OCaml and Poly/ML binaries are built
+# against Ubuntu 24.04's glibc and are not expected to run on older bases.
+platforms:
+  amd64:
+    build-on: [amd64]
+    build-for: [amd64]
+
+parts:
+  tlapm:
+    plugin: nil
+    # The upstream source pin (commit) lives in the VERSION file so that
+    # automation only has to touch one file. override-pull checks it out and
+    # override-build fails the build if the checked-out tree does not match.
+    source: https://github.com/tlaplus/tlapm.git
+    source-type: git
+    build-packages:
+      - build-essential
+      - gawk
+      - git
+      - m4
+      - ocaml
+      - opam
+      - patch
+      - pkg-config
+      - time
+      - unzip
+      - wget
+      - zlib1g-dev
+      - ca-certificates
+      # Isabelle's build-time JVM is headless but still initializes AWT
+      # fonts; minimal containers have none and the heap build crashes with
+      # "Fontconfig head is null".
+      - fontconfig
+      - fonts-dejavu-core
+    override-pull: |
+      craftctl default
+      TLAPM_COMMIT=$(sed -n '2p' "$CRAFT_PROJECT_DIR/VERSION" | tr -d '[:space:]')
+      git -C "$CRAFT_PART_SRC" fetch --quiet origin "$TLAPM_COMMIT"
+      git -C "$CRAFT_PART_SRC" checkout --quiet --detach "$TLAPM_COMMIT"
+    override-build: |
+      set -eu
+      TLAPM_VERSION=$(sed -n '1p' "$CRAFT_PROJECT_DIR/VERSION" | tr -d '[:space:]')
+      TLAPM_COMMIT=$(sed -n '2p' "$CRAFT_PROJECT_DIR/VERSION" | tr -d '[:space:]')
+
+      cd "$CRAFT_PART_SRC"
+      if [ "$(git rev-parse HEAD)" != "$TLAPM_COMMIT" ]; then
+        echo "FATAL: VERSION pins commit $TLAPM_COMMIT but source tree is at $(git rev-parse HEAD)" >&2
+        exit 1
+      fi
+      craftctl set version="${TLAPM_VERSION}.$(git rev-parse --short HEAD)"
+
+      # Upstream's default build downloads a prebuilt Z3 binary from a
+      # GitHub release (deps/z3). Ubuntu ships z3, and this SDK installs it
+      # from the Ubuntu archive at runtime, so drop that dune part entirely;
+      # tlapm resolves the z3 executable through PATH.
+      rm -rf deps/z3
+
+      # Isabelle-test is a ~4GB throwaway copy of the Isabelle tree that the
+      # upstream build creates but never installs or consumes. Skip it to
+      # keep build disk usage and time down (upstream keeps it for debugging).
+      # The edits are line-anchored so nothing else in dune.mk changes, and
+      # asserted below; the relocation check at the end of this script still
+      # proves the reduced Isabelle runtime works.
+      sed -i '/(dir "Isabelle-test")/d' deps/isabelle/dune
+      sed -i '/^all:/ s/ *\$(ISABELLE_TEST)//' deps/isabelle/dune.mk
+      sed -i 's/^\$(ISABELLE_DIR) \$(ISABELLE_TEST):/$(ISABELLE_DIR):/' deps/isabelle/dune.mk
+      sed -i '/cp -r \$(ISABELLE_DIR) \$(ISABELLE_TEST)/d' deps/isabelle/dune.mk
+      # Assert the patch landed exactly. Note the abort form: a standalone
+      # `! grep` would not trigger errexit, so forbidden patterns use
+      # `grep ... && exit 1` instead.
+      grep -q 'cp -r \$(ISABELLE_DIR) \$(ISABELLE_TEST)' deps/isabelle/dune.mk && exit 1
+      grep -qE '^all:.*ISABELLE_TEST' deps/isabelle/dune.mk && exit 1
+      grep -q 'Isabelle-test' deps/isabelle/dune && exit 1
+      grep -q '^all: $(ISABELLE_DIR) $(ISABELLE_DIR)/src/TLA+ Isabelle-install$' deps/isabelle/dune.mk
+      grep -q '^$(ISABELLE_DIR): $(ISABELLE_ARCHIVE)$' deps/isabelle/dune.mk
+
+      # Non-interactive opam, using Ubuntu's OCaml compiler via ocaml-system.
+      # Sandboxing is disabled: bwrap does not work in SDKcraft's LXD build
+      # environment (upstream's CI does the same).
+      export OPAMYES=1
+      export OPAMROOT="$CRAFT_PART_BUILD/opam-root"
+      mkdir -p "$CRAFT_PART_BUILD"
+      opam init --disable-sandboxing -y
+      opam switch create tlapm ocaml-system
+      eval "$(opam env --switch tlapm)"
+      # --with-test matters: the test executables are part of dune's default
+      # alias, so ounit2 (a with-test dep) is required even to just build.
+      # This mirrors upstream's `make opam-deps` exactly.
+      opam install ./ --deps-only --with-test --working-dir
+
+      # Build TLAPM with the Zenon, Isabelle/TLA+, and LS4 backends. Building
+      # also downloads the pinned Isabelle2025 distribution and builds the
+      # Pure, TLA+, and Options heaps from the vendored Isabelle/TLA+ sources.
+      dune build
+
+      # Relocatable install, then run upstream's own release check: it
+      # unpacks the install to a hostile path (spaces, unicode), hides the
+      # build tree, and proves a theorem with BY Isa and rejects a false one.
+      dune install --relocatable --prefix _build/tlapm
+      (cd _build && tar -czf tlapm.tar.gz tlapm)
+      bash test/TOOLS/check_relocated_release "$(pwd)/_build/tlapm.tar.gz" "$(pwd)/_build"
+
+      mkdir -p "$CRAFT_PART_INSTALL"
+      cp -a _build/tlapm/. "$CRAFT_PART_INSTALL/"

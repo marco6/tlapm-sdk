@@ -1,0 +1,16 @@
+# Runtime dependencies that come from the Ubuntu archive.
+# apt is preconfigured (no recommends, no prompts) inside setup-base.
+#
+# z3: the SMT backend. Its dependencies bring libstdc++6 (also needed by the
+# packaged ls4). libgmp10 is required by the bundled Poly/ML runtime
+# (lib/tlapm/backends/Isabelle-install/poly) and is not in the base image.
+apt-get update
+apt-get install z3 libgmp10
+
+# Put the SDK's bin directory on PATH system-wide. $SDK expands while this
+# hook runs, so the installation path is written out literally; \$PATH stays
+# literal for the login shell to expand. setup-base runs again on every
+# workshop refresh, keeping the path current.
+cat <<EOF > /etc/profile.d/tlapm.sh
+export PATH="$SDK/bin:\$PATH"
+EOF

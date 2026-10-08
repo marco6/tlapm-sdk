@@ -1,0 +1,27 @@
+summary: Launch a workshop and verify the SDK reports healthy and usable
+
+prepare: |
+  envsubst '${BASE}' <workshop.yaml.in >workshop.yaml
+  workshop launch
+
+execute: |
+  workshop info | grep -E 'status:\s+okay'
+
+  workshop exec -- tlapm --version
+  workshop exec -- z3 -version
+
+  # tlapm --config probes every backend it knows and prints a
+  # `Name == "command"` line for each one found. Require the three this
+  # SDK ships; optional solvers (CVC4, ...) are expected to be absent.
+  workshop exec -- tlapm --config >config.log 2>&1
+  grep -qF 'Isabelle ==' config.log
+  grep -qF 'zenon ==' config.log
+  grep -qF 'Z3 ==' config.log
+
+debug: |
+  workshop tasks
+  workshop info || true
+  cat config.log || true
+
+restore: |
+  workshop remove || true

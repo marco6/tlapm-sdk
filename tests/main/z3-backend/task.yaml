@@ -1,0 +1,22 @@
+summary: Prove an obligation with the Z3 backend
+
+prepare: |
+  envsubst '${BASE}' <workshop.yaml.in >workshop.yaml
+  workshop launch
+
+execute: |
+  workshop exec -- tee Z3Test.tla >/dev/null <<'TLA'
+  ---- MODULE Z3Test ----
+  EXTENDS TLAPS, Naturals
+  THEOREM t == 2 + 2 = 4 BY Z3
+  ====
+  TLA
+  workshop exec -- tlapm --cleanfp --strict Z3Test.tla >z3.log 2>&1
+  grep -qE 'All [0-9]+ obligations? proved' z3.log
+
+debug: |
+  workshop tasks
+  cat z3.log || true
+
+restore: |
+  workshop remove || true
